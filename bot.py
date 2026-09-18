@@ -93,16 +93,17 @@ async def gerer_les_salons_et_repartir(guild: discord.Guild):
         else:
             await salon.send("🔄 Salon synchronisé. En attente de membres...")
 
-async def actualiser_affichage_general():
+async def actualiser_affichage_general(guild: discord.Guild):
     if not bot.salon_classement_id or not bot.message_classement_id:
         return
-    salon = bot.get_channel(bot.salon_classement_id)
+    salon = guild.get_channel(bot.salon_classement_id)
     if salon:
         try:
             msg = await salon.fetch_message(bot.message_classement_id)
             await msg.edit(embed=generer_embed_classement(), view=ClassementButtons())
         except:
             pass
+
 # ==========================================
 # 4. INTERFACES DE SÉLECTION (MENUS DÉROULANTS)
 # ==========================================
@@ -112,21 +113,22 @@ class MembreSelectMenu(discord.ui.Select):
         options = []
         for index, membre in enumerate(bot.liste_membres, start=1):
             options.append(discord.SelectOption(label=f"Top {index} : {membre.name}", value=str(index - 1)))
-        super().__init__(placeholder="Choisis un membre...", min_values=1, max_values=1, options=options)
+        super().__init__(placeholder="Choisis un membre...", min_values=1, max_values=1, options=options[:25])
 
     async def callback(self, interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=True)
         index_joueur = int(self.values)
         joueur = bot.liste_membres[index_joueur]
 
         if self.action_type == "remove":
             bot.liste_membres.pop(index_joueur)
-            await interaction.response.send_message(f"✅ {joueur.name} retiré.", ephemeral=True)
-            await actualiser_affichage_general()
+            await interaction.followup.send(f"✅ {joueur.name} retiré.", ephemeral=True)
+            await actualiser_affichage_general(interaction.guild)
             await gerer_les_salons_et_repartir(interaction.guild)
         elif self.action_type == "move":
             view = discord.ui.View()
             view.add_item(PositionSelectMenu(index_joueur))
-            await interaction.response.send_message(f"Où déplacer {joueur.name} ?", view=view, ephemeral=True)
+            await interaction.followup.send(f"Où déplacer {joueur.name} ?", view=view, ephemeral=True)
 
 class PositionSelectMenu(discord.ui.Select):
     def __init__(self, ancien_index: int):
@@ -134,14 +136,15 @@ class PositionSelectMenu(discord.ui.Select):
         options = []
         for i in range(1, len(bot.liste_membres) + 1):
             options.append(discord.SelectOption(label=f"Placer au Top {i}", value=str(i - 1)))
-        super().__init__(placeholder="Sélectionne la position...", min_values=1, max_values=1, options=options)
+        super().__init__(placeholder="Sélectionne la position...", min_values=1, max_values=1, options=options[:25])
 
     async def callback(self, interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=True)
         nouvel_index = int(self.values)
         joueur = bot.liste_membres.pop(self.ancien_index)
         bot.liste_membres.insert(nouvel_index, joueur)
-        await interaction.response.send_message(f"✅ Déplacé au Top {nouvel_index + 1}.", ephemeral=True)
-        await actualiser_affichage_general()
+        await interaction.followup.send(f"✅ Déplacé au Top {nouvel_index + 1}.", ephemeral=True)
+        await actualiser_affichage_general(interaction.guild)
         await gerer_les_salons_et_repartir(interaction.guild)
 
 # ==========================================
@@ -193,9 +196,10 @@ async def add(interaction: discord.Interaction, membre: discord.Member):
     if membre in bot.liste_membres:
         await interaction.response.send_message("❌ Déjà présent !", ephemeral=True)
         return
-    bot.liste_membres.append(membre)
+    
     await interaction.response.defer(ephemeral=True)
-    await actualiser_affichage_general()
+    bot.liste_membres.append(membre)
+    await actualiser_affichage_general(interaction.guild)
     await gerer_les_salons_et_repartir(interaction.guild)
     await interaction.followup.send(f"✅ {membre.name} ajouté !", ephemeral=True)
 
@@ -204,17 +208,20 @@ async def addmany(interaction: discord.Interaction, m1: discord.Member, m2: disc
     if not bot.salon_classement_id:
         await interaction.response.send_message("❌ Fais d'abord `/setup` !", ephemeral=True)
         return
+    
+    await interaction.response.defer(ephemeral=True)
     membres_recus = [m1, m2, m3, m4, m5]
     ajoutes = 0
     for m in membres_recus:
         if m and m not in bot.liste_membres:
             bot.liste_membres.append(m)
             ajoutes += 1
+            
     if ajoutes == 0:
-        await interaction.response.send_message("❌ Aucun membre ajouté.", ephemeral=True)
+        await interaction.followup.send("❌ Aucun membre ajouté.", ephemeral=True)
         return
-    await interaction.response.defer(ephemeral=True)
-    await actualiser_affichage_general()
+        
+    await actualiser_affichage_general(interaction.guild)
     await gerer_les_salons_et_repartir(interaction.guild)
     await interaction.followup.send(f"✅ {ajoutes} membres ajoutés !", ephemeral=True)
 
