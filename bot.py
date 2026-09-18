@@ -104,6 +104,7 @@ async def actualiser_affichage_general(guild: discord.Guild):
             await msg.edit(embed=generer_embed_classement(), view=ClassementButtons())
         except:
             pass
+
 # ==========================================
 # 4. INTERFACES DE SÉLECTION (MENUS DÉROULANTS)
 # ==========================================
@@ -128,22 +129,24 @@ class MembreSelectMenu(discord.ui.Select):
         elif self.action_type == "move":
             view = discord.ui.View()
             view.add_item(PositionSelectMenu(index_joueur))
-            await interaction.followup.send(f"Où déplacer {joueur.name} ?", view=view, ephemeral=True)
+            await interaction.followup.send(f"À la place de quel Top veux-tu insérer {joueur.name} ? (Les autres descendront)", view=view, ephemeral=True)
 
 class PositionSelectMenu(discord.ui.Select):
     def __init__(self, ancien_index: int):
         self.ancien_index = ancien_index
         options = []
         for i in range(1, len(bot.liste_membres) + 1):
-            options.append(discord.SelectOption(label=f"Placer au Top {i}", value=str(i - 1)))
-        super().__init__(placeholder="Sélectionne la position...", min_values=1, max_values=1, options=options[:25])
+            options.append(discord.SelectOption(label=f"Prendre la place du Top {i}", value=str(i - 1)))
+        super().__init__(placeholder="Sélectionne la position cible...", min_values=1, max_values=1, options=options[:25])
 
     async def callback(self, interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=True)
         nouvel_index = int(self.values)
+        
         joueur = bot.liste_membres.pop(self.ancien_index)
         bot.liste_membres.insert(nouvel_index, joueur)
-        await interaction.followup.send(f"✅ Déplacé au Top {nouvel_index + 1}.", ephemeral=True)
+        
+        await interaction.followup.send(f"✅ {joueur.name} inséré au Top {nouvel_index + 1}. Les suivants ont été décalés vers le bas.", ephemeral=True)
         await actualiser_affichage_general(interaction.guild)
         await gerer_les_salons_et_repartir(interaction.guild)
 
@@ -161,7 +164,7 @@ class ClassementButtons(discord.ui.View):
             return
         view = discord.ui.View()
         view.add_item(MembreSelectMenu("move"))
-        await interaction.response.send_message("Qui déplacer ?", view=view, ephemeral=True)
+        await interaction.response.send_message("Qui veux-tu déplacer ?", view=view, ephemeral=True)
 
     @discord.ui.button(label="Retirer ❌", style=discord.ButtonStyle.danger, custom_id="btn_remove")
     async def remove_button(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -171,7 +174,6 @@ class ClassementButtons(discord.ui.View):
         view = discord.ui.View()
         view.add_item(MembreSelectMenu("remove"))
         await interaction.response.send_message("Qui exclure ?", view=view, ephemeral=True)
-
 # ==========================================
 # 6. ENSEMBLE DES COMMANDES SLASH (/)
 # ==========================================
@@ -225,23 +227,40 @@ async def addmany(interaction: discord.Interaction, m1: discord.Member, m2: disc
     await gerer_les_salons_et_repartir(interaction.guild)
     await interaction.followup.send(f"✅ {ajoutes} membres ajoutés !", ephemeral=True)
 
-@bot.tree.command(name="change", description="Échange la place de deux membres du classement")
-@app_commands.describe(premier="Le premier membre à intervertir", deuxieme="Le deuxième membre")
+@bot.tree.command(name="change", description="Insère un membre à la place d'un autre et décale ce dernier vers le bas")
+@app_commands.describe(premier="Le joueur qui prend la place", deuxieme="Le joueur qui va se faire remplacer et descendre")
 async def change(interaction: discord.Interaction, premier: discord.Member, deuxieme: discord.Member):
     if not bot.salon_classement_id:
         await interaction.response.send_message("❌ Fais d'abord `/setup` !", ephemeral=True)
         return
+        
     if premier not in bot.liste_membres or deuxieme not in bot.liste_membres:
-        await interaction.response.send_message("❌ Membre introuvable !", ephemeral=True)
+        await interaction.response.send_message("❌ L'un des deux membres (ou les deux) n'est pas dans le classement !", ephemeral=True)
+        return
+
+    if premier == deuxieme:
+        await interaction.response.send_message("❌ Tu ne peux pas sélectionner deux fois la même personne !", ephemeral=True)
         return
 
     await interaction.response.defer(ephemeral=True)
-    idx1, idx2 = bot.liste_membres.index(premier), bot.liste_membres.index(deuxieme)
-    bot.liste_membres[idx1], bot.liste_membres[idx2] = bot.liste_membres[idx2], bot.liste_membres[idx1]
 
+    # 1. On trouve la position actuelle du joueur cible (le deuxième sélectionné)
+    idx_cible = bot.liste_membres.index(deuxieme)
+
+    # 2. On retire le joueur à déplacer (le premier sélectionné) de la liste
+    bot.liste_membres.remove(premier)
+
+    # 3. On l'insère à la place de la cible (ce qui le décale automatiquement vers le bas)
+    bot.liste_membres.insert(idx_cible, premier)
+
+    # 4. Mise à jour générale
     await actualiser_affichage_general(interaction.guild)
     await gerer_les_salons_et_repartir(interaction.guild)
-    await interaction.followup.send(f"✅ Places inversées entre {premier.name} et {deuxieme.name} !", ephemeral=True)
+    
+    await interaction.followup.send(
+        f"✅ {premier.name} a pris la place de {deuxieme.name}. {deuxieme.name} descend d'une place !", 
+        ephemeral=True
+    )
 
 @bot.tree.command(name="toggle_status", description="Allume (En ligne) ou cache (Invisible) le bot")
 async def toggle_status(interaction: discord.Interaction):
