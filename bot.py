@@ -33,8 +33,6 @@ class TeamBot(commands.Bot):
 
     async def setup_hook(self):
         self.add_view(ClassementButtons())
-        await self.tree.sync()
-        print("Commandes synchronisées !")
 
 bot = TeamBot()
 
@@ -179,7 +177,16 @@ class ClassementButtons(discord.ui.View):
 # ==========================================
 @bot.event
 async def on_ready():
-    print(f"✨ Le bot {bot.user.name} est prêt !")
+    print(f"✨ Le bot {bot.user.name} est connecté !")
+    
+    # Synchronisation immédiate et forcée sur chaque serveur pour contourner le cache mobile
+    try:
+        for guild in bot.guilds:
+            bot.tree.copy_global_to(guild=guild)
+            await bot.tree.sync(guild=guild)
+        print("🔄 Synchronisation forcée réussie sur tous les serveurs !")
+    except Exception as e:
+        print(f"❌ Erreur lors de la synchronisation : {e}")
 
 @bot.tree.command(name="setup", description="Initialise un classement")
 async def setup(interaction: discord.Interaction):
