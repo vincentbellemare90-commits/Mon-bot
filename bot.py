@@ -29,6 +29,7 @@ class TeamBot(commands.Bot):
         self.salon_classement_id = None
         self.message_classement_id = None
         self.liste_membres = [] 
+        self.est_invisible = False
 
     async def setup_hook(self):
         self.add_view(ClassementButtons())
@@ -103,7 +104,6 @@ async def actualiser_affichage_general(guild: discord.Guild):
             await msg.edit(embed=generer_embed_classement(), view=ClassementButtons())
         except:
             pass
-
 # ==========================================
 # 4. INTERFACES DE SÉLECTION (MENUS DÉROULANTS)
 # ==========================================
@@ -224,6 +224,35 @@ async def addmany(interaction: discord.Interaction, m1: discord.Member, m2: disc
     await actualiser_affichage_general(interaction.guild)
     await gerer_les_salons_et_repartir(interaction.guild)
     await interaction.followup.send(f"✅ {ajoutes} membres ajoutés !", ephemeral=True)
+
+@bot.tree.command(name="change", description="Échange la place de deux membres du classement")
+@app_commands.describe(premier="Le premier membre à intervertir", deuxieme="Le deuxième membre")
+async def change(interaction: discord.Interaction, premier: discord.Member, deuxieme: discord.Member):
+    if not bot.salon_classement_id:
+        await interaction.response.send_message("❌ Fais d'abord `/setup` !", ephemeral=True)
+        return
+    if premier not in bot.liste_membres or deuxieme not in bot.liste_membres:
+        await interaction.response.send_message("❌ Membre introuvable !", ephemeral=True)
+        return
+
+    await interaction.response.defer(ephemeral=True)
+    idx1, idx2 = bot.liste_membres.index(premier), bot.liste_membres.index(deuxieme)
+    bot.liste_membres[idx1], bot.liste_membres[idx2] = bot.liste_membres[idx2], bot.liste_membres[idx1]
+
+    await actualiser_affichage_general(interaction.guild)
+    await gerer_les_salons_et_repartir(interaction.guild)
+    await interaction.followup.send(f"✅ Places inversées entre {premier.name} et {deuxieme.name} !", ephemeral=True)
+
+@bot.tree.command(name="toggle_status", description="Allume (En ligne) ou cache (Invisible) le bot")
+async def toggle_status(interaction: discord.Interaction):
+    if bot.est_invisible:
+        await bot.change_presence(status=discord.Status.online)
+        bot.est_invisible = False
+        await interaction.response.send_message("🟢 Le bot est maintenant affiché comme **En ligne** !", ephemeral=True)
+    else:
+        await bot.change_presence(status=discord.Status.invisible)
+        bot.est_invisible = True
+        await interaction.response.send_message("⚫ Le bot est maintenant caché (**Invisible**), mais il fonctionne toujours !", ephemeral=True)
 
 # Lancement du bot via Render
 bot.run(os.getenv('DISCORD_TOKEN'))
