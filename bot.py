@@ -2,7 +2,21 @@ import os
 import discord
 from discord.ext import commands
 from discord import app_commands
+import threading
+from http.server import SimpleHTTPRequestHandler, HTTPServer
 
+# 1. FAUX SERVEUR POUR CONFIGURER LE PORT SUR RENDER EN MODE GRATUIT
+def run_fake_server():
+    # Render utilise la variable PORT, si elle n'existe pas on prend 10000
+    port = int(os.getenv("PORT", 10000))
+    server = HTTPServer(('0.0.0.0', port), SimpleHTTPRequestHandler)
+    print(f"Faux serveur actif sur le port {port} pour tricher sur Render !")
+    server.serve_forever()
+
+# Lance le faux serveur en arrière-plan
+threading.Thread(target=run_fake_server, daemon=True).start()
+
+# 2. CODE DE TON BOT DISCORD
 intents = discord.Intents.default()
 intents.message_content = True 
 intents.members = True 
@@ -43,5 +57,5 @@ async def top(interaction: discord.Interaction, position: str, membre: discord.M
     await salon_cible.send(f"🏆 **Top {position}** ➡️ {membre.mention}")
     await interaction.response.send_message(f"Opération réussie dans {salon_cible.mention}.", ephemeral=True)
 
-# Important : On récupère le token de manière sécurisée depuis l'hébergeur
+# Lancement du bot avec ton Token secret
 bot.run(os.getenv('DISCORD_TOKEN'))
