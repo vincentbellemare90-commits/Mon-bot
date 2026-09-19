@@ -55,6 +55,15 @@ def generer_embed_classement():
         
     return discord.Embed(title="🏆 Classement Officiel 🏆", description=texte_classement, color=discord.Color.gold())
 
+async def activation_automatique(interaction: discord.Interaction):
+    """Active automatiquement le système de classement si /setup n'a pas été fait."""
+    if not bot.salon_classement_id:
+        bot.salon_classement_id = interaction.channel_id
+        bot.liste_membres = [] 
+        # On envoie le message initial du classement dans le salon actuel
+        msg_initial = await interaction.channel.send(embed=generer_embed_classement(), view=ClassementButtons())
+        bot.message_classement_id = msg_initial.id
+
 async def gerer_les_salons_et_repartir(guild: discord.Guild):
     total_membres = len(bot.liste_membres)
     if total_membres <= 5:
@@ -188,7 +197,7 @@ async def on_ready():
     except Exception as e:
         print(f"❌ Erreur lors de la synchronisation : {e}")
 
-@bot.tree.command(name="setup", description="Initialise un classement")
+@bot.tree.command(name="setup", description="Initialise manuellement un classement")
 async def setup(interaction: discord.Interaction):
     bot.salon_classement_id = interaction.channel_id
     bot.liste_membres = [] 
@@ -199,9 +208,9 @@ async def setup(interaction: discord.Interaction):
 @bot.tree.command(name="add", description="Ajoute un membre unique")
 @app_commands.describe(membre="Le membre à ajouter")
 async def add(interaction: discord.Interaction, membre: discord.Member):
-    if not bot.salon_classement_id:
-        await interaction.response.send_message("❌ Fais d'abord `/setup` !", ephemeral=True)
-        return
+    # Activation automatique si le classement n'est pas configuré
+    await activation_automatique(interaction)
+
     if membre in bot.liste_membres:
         await interaction.response.send_message("❌ Déjà présent !", ephemeral=True)
         return
@@ -214,9 +223,8 @@ async def add(interaction: discord.Interaction, membre: discord.Member):
 
 @bot.tree.command(name="addmany", description="Ajoute plusieurs membres à la fois")
 async def addmany(interaction: discord.Interaction, m1: discord.Member, m2: discord.Member=None, m3: discord.Member=None, m4: discord.Member=None, m5: discord.Member=None):
-    if not bot.salon_classement_id:
-        await interaction.response.send_message("❌ Fais d'abord `/setup` !", ephemeral=True)
-        return
+    # Activation automatique si le classement n'est pas configuré
+    await activation_automatique(interaction)
     
     await interaction.response.defer(ephemeral=True)
     membres_recus = [m1, m2, m3, m4, m5]
@@ -237,9 +245,8 @@ async def addmany(interaction: discord.Interaction, m1: discord.Member, m2: disc
 @bot.tree.command(name="change", description="Insère un membre à la place d'un autre et décale ce dernier vers le bas")
 @app_commands.describe(premier="Le joueur qui prend la place", deuxieme="Le joueur qui va se faire remplacer et descendre")
 async def change(interaction: discord.Interaction, premier: discord.Member, deuxieme: discord.Member):
-    if not bot.salon_classement_id:
-        await interaction.response.send_message("❌ Fais d'abord `/setup` !", ephemeral=True)
-        return
+    # Activation automatique si le classement n'est pas configuré
+    await activation_automatique(interaction)
         
     if premier not in bot.liste_membres or deuxieme not in bot.liste_membres:
         await interaction.response.send_message("❌ L'un des deux membres (ou les deux) n'est pas dans le classement !", ephemeral=True)
